@@ -33,7 +33,7 @@ If your endpoint needs an API key, set `api_key` (or `SISI_API_KEY`); otherwise 
 
 Built by GitHub Actions: Linux tar.gz (run `./sisi`; Qt 6 libraries are included, you need the usual
 system X11/OpenGL libraries, e.g. `libxcb-cursor0`), macOS zip (unsigned: right-click > Open the first
-time; put `sisi.ini` in `~/.config/sisi/`), Windows zip (run `sisi.exe`).
+time; put `sisi.ini` in `~/.config/sisi/`), Windows zip (run `sisi.exe`; if it still does not start, run `vc_redist.x64.exe` from the zip once).
 
 ## Build
 

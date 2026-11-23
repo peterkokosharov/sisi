@@ -107,7 +107,10 @@ jobs:
         run: |
           mkdir -p dist/sisi-windows
           cp build/Release/sisi.exe dist/sisi-windows/
-          windeployqt --release --no-translations --compiler-runtimedist/sisi-windows/sisi.exe
+          windeployqt --release --no-translations --compiler-runtime dist/sisi-windows/sisi.exe
+          # windeployqt only adds vc_redist.x64.exe; ship the runtime DLLs themselves as well.
+          crt="$(cygpath -u "$VCToolsRedistDir")x64/Microsoft.VC143.CRT"
+          cp "$crt"/msvcp140*.dll "$crt"/vcruntime140*.dll "$crt"/concrt140.dll dist/sisi-windows/
           cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example dist/sisi-windows/
           (cd dist && 7z a -tzip sisi-windows-x64.zip sisi-windows)
       - uses: actions/upload-artifact@v4
