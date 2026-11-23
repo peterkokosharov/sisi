@@ -1,6 +1,6 @@
 # Sisi Valkodav
 
-A small Qt 6 desktop chat window for [rex](https://github.com/) (a Python agent). Sisi was a friend's
+A small Qt 6 desktop chat window for rex (a Python agent). Sisi was a friend's
 little bolonka who once fought a big dog over a bone; "Valkodav" (roughly "wolfhound") is the joke.
 
 Hobby project, MIT, use it anywhere.
