@@ -1,0 +1,9 @@
+; Sisi Valkodav configuration. Copy to sisi.ini next to the program
+; (Linux/macOS: or ~/.config/sisi/sisi.ini). Environment variables SISI_* win over this file.
+[sisi]
+endpoint  = http://127.0.0.1:4000
+model     = haiku
+; workspace = C:\work\project
+; python    = python
+; rex_dir   = C:\tools\rex
+; log       = sisi.log
