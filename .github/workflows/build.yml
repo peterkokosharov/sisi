@@ -109,8 +109,11 @@ jobs:
           cp build/Release/sisi.exe dist/sisi-windows/
           windeployqt --release --no-translations --compiler-runtime dist/sisi-windows/sisi.exe
           # windeployqt only adds vc_redist.x64.exe; ship the runtime DLLs themselves as well.
-          crt="$(cygpath -u "$VCToolsRedistDir")x64/Microsoft.VC143.CRT"
-          cp "$crt"/msvcp140*.dll "$crt"/vcruntime140*.dll "$crt"/concrt140.dll dist/sisi-windows/
+          # The CRT folder name follows the toolset (VC143 for VS 2022, VC145 for VS 2026): take whichever exists.
+          crt="$(ls -d "$(cygpath -u "$VCToolsRedistDir")"x64/Microsoft.VC14*.CRT | sort | tail -n 1)"
+          echo "CRT folder: $crt"
+          cp "$crt"/msvcp140*.dll "$crt"/vcruntime140*.dll dist/sisi-windows/
+          cp "$crt"/concrt140.dll dist/sisi-windows/ 2>/dev/null || echo "concrt140.dll not present, skipped"
           cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example dist/sisi-windows/
           (cd dist && 7z a -tzip sisi-windows-x64.zip sisi-windows)
       - uses: actions/upload-artifact@v4
