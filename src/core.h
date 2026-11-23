@@ -18,6 +18,8 @@ struct Config {
     std::string python;
     std::string rexDir;
     std::string apiKey;      // optional; never written to the report in clear
+    std::string merman;      // path of merman-cli (mermaid diagrams); empty = look next to the exe / PATH
+    std::string plantumlJar; // path of plantuml.jar; empty = PlantUML blocks stay code
     std::string log;
     std::string iniPath;    // file that was read, empty if none
     std::string report;      // "key = value (source)" lines for the log
@@ -51,6 +53,8 @@ inline void resolveConfig(Config &cfg, const IniFile *ini, EnvFn env,
     cfgPick(cfg, cfg.python, env, ini, "SISI_PYTHON", "python");
     cfgPick(cfg, cfg.rexDir, env, ini, "SISI_REX_DIR", "rex_dir");
     cfgPick(cfg, cfg.apiKey, env, ini, "SISI_API_KEY", "api_key");
+    cfgPick(cfg, cfg.merman, env, ini, "SISI_MERMAN", "merman");
+    cfgPick(cfg, cfg.plantumlJar, env, ini, "SISI_PLANTUML_JAR", "plantuml_jar");
     cfgPick(cfg, cfg.log, env, ini, "SISI_LOG", "log");
 }
 
