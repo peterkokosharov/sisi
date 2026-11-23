@@ -6,4 +6,6 @@ model     = haiku
 ; workspace = C:\work\project
 ; python    = python
 ; rex_dir   = C:\tools\rex
+; Only if your endpoint needs a key (default: RUNTIME_LITELLM__API_KEY, else "dummy"):
+; api_key   = sk-...
 ; log       = sisi.log

@@ -26,6 +26,8 @@ Order: environment `SISI_ENDPOINT`, `SISI_MODEL`, `SISI_WORKSPACE`, `SISI_PYTHON
 Linux/macOS also `~/.config/sisi/sisi.ini`) > defaults (`http://127.0.0.1:4000`, `haiku`, current
 directory, `python` on Windows / `python3` elsewhere, `rex` next to the program). See `sisi.ini.example`.
 The optional log masks keys, tokens, passwords and URL credentials.
+If your endpoint needs an API key, set `api_key` (or `SISI_API_KEY`); otherwise an existing
+`RUNTIME_LITELLM__API_KEY` from the environment is passed on, or the dummy value `dummy`.
 
 ## Downloads
 
