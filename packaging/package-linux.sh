@@ -12,7 +12,7 @@ cp "$BIN" "$OUT/sisi.bin"
 cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example "$OUT/"
 
 # Qt libraries from the Qt installation (not the system ones).
-QT_ROOT=$(dirname "$(dirname "$(command -v qmake6 || command -v qmake)")")
+QT_ROOT=${QT_ROOT_DIR:?run this after install-qt-action (it sets QT_ROOT_DIR)}
 ldd "$BIN" | awk '/=> \//{print $3}' | grep "^$QT_ROOT/" | while read -r lib; do
     cp -L "$lib" "$OUT/lib/"
 done
