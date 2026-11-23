@@ -51,7 +51,11 @@ void loadConfig() {
     if (ini) ini_free(ini);
 
     // Defaults that need Qt: workspace = current directory, rex = folder "rex" next to the exe.
-    if (g_cfg.workspace == ".") g_cfg.workspace = QDir::currentPath().toStdString();
+    if (g_cfg.workspace == ".") {
+        // A .app started from Finder has "/" as current directory: use the home folder then.
+        const QString cwd = QDir::currentPath();
+        g_cfg.workspace = (cwd == QLatin1String("/") ? QDir::homePath() : cwd).toStdString();
+    }
     if (g_cfg.rexDir.empty()) {
         const QString cand = exeDir + QStringLiteral("/rex");
         if (QDir(cand).exists()) g_cfg.rexDir = cand.toStdString();
