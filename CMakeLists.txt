@@ -1,6 +1,9 @@
 # Sisi Valkodav - Qt 6 Widgets front-end for rex. MIT licensed (see LICENSE).
 cmake_minimum_required(VERSION 3.16)
 project(sisi VERSION 0.1.0 LANGUAGES C CXX)
+if(WIN32)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,9 +35,16 @@ target_include_directories(sisi PRIVATE src)
 target_link_libraries(sisi PRIVATE Qt6::Widgets Qt6::Network Qt6::Svg)
 if(WIN32)
     target_compile_definitions(sisi PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_sources(sisi PRIVATE packaging/sisi.rc)    # embeds sisi.ico
+endif()
+if(APPLE)
+    set(SISI_ICNS ${CMAKE_SOURCE_DIR}/packaging/icons/sisi.icns)
+    target_sources(sisi PRIVATE ${SISI_ICNS})
+    set_source_files_properties(${SISI_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 endif()
 set_target_properties(sisi PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "Sisi Valkodav"
+    MACOSX_BUNDLE_ICON_FILE sisi.icns
     MACOSX_BUNDLE_GUI_IDENTIFIER "org.sisi.valkodav"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")

@@ -1,0 +1,8 @@
+Sisi Valkodav - Linux install note
+
+Run ./sisi from this folder; nothing needs installing.
+
+Optional desktop integration (per user):
+  cp -r icons/hicolor ~/.local/share/icons/
+  gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor   # if available
+  sed "s|^Exec=.*|Exec=$PWD/sisi|" sisi.desktop > ~/.local/share/applications/sisi.desktop

@@ -10,6 +10,10 @@ rm -rf dist && mkdir -p "$OUT/lib" "$OUT/plugins"
 
 cp "$BIN" "$OUT/sisi.bin"
 cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example "$OUT/"
+cp -r packaging/icons "$OUT/icons"
+cp packaging/icons/sisi.desktop "$OUT/sisi.desktop"
+cp packaging/INSTALL-linux.txt "$OUT/INSTALL.txt"
+rm -f "$OUT/icons/README.md" "$OUT/icons/sisi.ico" "$OUT/icons/sisi.icns" "$OUT/icons/sisi.desktop"
 
 # Qt libraries from the Qt installation (not the system ones).
 QT_ROOT=${QT_ROOT_DIR:?run this after install-qt-action (it sets QT_ROOT_DIR)}
