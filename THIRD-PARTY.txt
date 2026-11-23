@@ -1,7 +1,7 @@
 Third-party software used by Sisi Valkodav
 ==========================================
 
-Qt 6 (Qt Widgets, Qt Network, Qt Core, Qt Gui)
+Qt 6 (Qt Widgets, Qt Network, Qt SVG, Qt Core, Qt Gui)
   Sisi links Qt dynamically (shared libraries / frameworks / DLLs shipped
   next to the program). Qt is licensed under the GNU Lesser General Public
   License version 3 (LGPLv3); see https://www.gnu.org/licenses/lgpl-3.0.html
@@ -9,6 +9,11 @@ Qt 6 (Qt Widgets, Qt Network, Qt Core, Qt Gui)
   Qt source code: https://download.qt.io/official_releases/qt/
   (or https://code.qt.io/cgit/qt/). You may replace the Qt libraries shipped
   with this program by your own build of the same Qt version.
+
+ICU (International Components for Unicode), shipped with the Qt libraries
+  in the Linux package. Copyright (c) 1991-2024 Unicode, Inc. Licensed
+  under the Unicode License: https://www.unicode.org/copyright.html
+  (see https://github.com/unicode-org/icu/blob/main/icu4c/LICENSE)
 
 Wine initialization-file parser (src/ini.c, src/ini.h)
   Copyright (c) 1993 Miguel de Icaza. Original Wine license and the
