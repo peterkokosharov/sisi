@@ -47,10 +47,12 @@ private slots:
 private:
     void handleLine(const QString &line);
     void drainStdout(bool atEnd);
+    void drainStderr(bool atEnd);
 
     QProcess *proc_ = nullptr;
     QByteArray buf_;          // stdout bytes not yet forming a full line
-    QString lastStderr_;      // last non-empty stderr line, shown if rex exits with an error
+    QByteArray errBuf_;       // same for stderr
+    QString lastStderr_;     // last non-empty stderr line, shown if rex exits with an error
 };
 
 #endif

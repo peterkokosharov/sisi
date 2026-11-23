@@ -44,6 +44,7 @@ bool RexBridge::start(const QString &endpoint, const QString &model, const QStri
             "  (cwd " + workspace.toStdString() + ", PYTHONPATH prefix " + rexDir.toStdString() + ")");
 
     lastStderr_.clear();
+    errBuf_.clear();
     proc_ = new QProcess(this);
     proc_->setProcessEnvironment(env);
     if (!workspace.isEmpty()) proc_->setWorkingDirectory(workspace);
@@ -117,9 +118,17 @@ void RexBridge::drainStdout(bool atEnd) {
 
 void RexBridge::onStderr() {
     if (!proc_) return;
-    const QStringList lines = QString::fromUtf8(proc_->readAllStandardError()).split(QLatin1Char('\n'));
-    for (QString line : lines) {
-        line = line.trimmed();
+    errBuf_ += proc_->readAllStandardError();
+    drainStderr(false);
+}
+
+// Like drainStdout: only complete lines, the unfinished rest waits for more data (or the exit).
+void RexBridge::drainStderr(bool atEnd) {
+    qsizetype nl;
+    while ((nl = errBuf_.indexOf('\n')) >= 0 || (atEnd && !errBuf_.isEmpty())) {
+        const QByteArray raw = (nl >= 0) ? errBuf_.left(nl) : errBuf_;
+        errBuf_.remove(0, (nl >= 0) ? nl + 1 : errBuf_.size());
+        const QString line = QString::fromUtf8(raw).trimmed();
         if (line.isEmpty()) continue;
         logLine("rex stderr> " + line.toStdString());
         lastStderr_ = line;
@@ -128,7 +137,8 @@ void RexBridge::onStderr() {
 }
 
 void RexBridge::onFinished(int code, QProcess::ExitStatus status) {
-    onStderr();
+    if (proc_) errBuf_ += proc_->readAllStandardError();
+    drainStderr(true);
     if (proc_) buf_ += proc_->readAllStandardOutput();
     drainStdout(true);
     const bool ok = (status == QProcess::NormalExit && code == 0);
