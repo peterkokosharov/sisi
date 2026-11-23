@@ -1,0 +1,131 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: 6.8.3          # Qt 6.8 LTS
+
+jobs:
+  tests:
+    name: Unit tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S tests -B build-tests
+      - name: Build
+        run: cmake --build build-tests --config Release
+      - name: Run
+        run: ctest --test-dir build-tests -C Release --output-on-failure
+
+  linux:
+    name: Linux x86_64 (tar.gz)
+    needs: tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4.3.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1-dev libxkbcommon-dev libxcb-cursor0
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+      - name: Package
+        run: ./packaging/package-linux.sh build/sisi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sisi-linux-x86_64
+          path: dist/sisi-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  macos:
+    name: macOS arm64 (.app zip)
+    needs: tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4.3.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 3
+      - name: Package
+        run: |
+          macdeployqt build/sisi.app
+          mkdir -p dist/sisi-macos
+          cp -R build/sisi.app "dist/sisi-macos/Sisi Valkodav.app"
+          cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example dist/sisi-macos/
+          (cd dist && zip -qry sisi-macos-arm64.zip sisi-macos)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sisi-macos-arm64
+          path: dist/sisi-macos-arm64.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64 (zip)
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4.3.0
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Build
+        shell: bash
+        run: |
+          cmake -S . -B build
+          cmake --build build --config Release --parallel 2
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist/sisi-windows
+          cp build/Release/sisi.exe dist/sisi-windows/
+          windeployqt --release --no-translations dist/sisi-windows/sisi.exe
+          cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example dist/sisi-windows/
+          (cd dist && 7z a -tzip sisi-windows-x64.zip sisi-windows)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sisi-windows-x64
+          path: dist/sisi-windows-x64.zip
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" artifacts/* --repo "${{ github.repository }}" --title "Sisi Valkodav ${{ github.ref_name }}" --generate-notes
