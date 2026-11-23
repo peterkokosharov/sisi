@@ -79,7 +79,8 @@ private:
     PermQueue perms_;                // requests waiting; the first one is on screen
     PermissionDialog *permDlg_ = nullptr;
 
-    bool ctxWarned_ = false;         // the warning line was shown for the current warning
+    bool busy_ = false;
+    bool ctxWarned_ = false;        // the warning line was shown for the current warning
     bool streamedThisTurn_ = false;  // tokens were shown, so the final text must not be shown again
     QString curEndpoint_, curModel_, curWorkspace_;   // what the running rex was started with
 };

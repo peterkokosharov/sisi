@@ -32,7 +32,12 @@ ChatView::ChatView(QWidget *parent)
 // The document asks for images it does not know: we never load any by name.
 // Images added with addResource (our own sisi:// names) are found before this is called.
 QVariant ChatView::loadResource(int type, const QUrl &name) {
-    if (type == QTextDocument::ImageResource) return QVariant();
+    if (type == QTextDocument::ImageResource) {
+        // A non-null image stops Qt's own file/URL fallback; a missing image stays invisible.
+        QImage blank(1, 1, QImage::Format_ARGB32);
+        blank.fill(Qt::transparent);
+        return QVariant::fromValue(blank);
+    }
     return QTextBrowser::loadResource(type, name);
 }
 
@@ -141,7 +146,7 @@ void ChatView::insertPlain(Kind kind, const QString &text) {
 // Renders Markdown into a scratch document and copies it to the end of the chat.
 void ChatView::insertMarkdown(const QString &text) {
     QTextDocument scratch;
-    scratch.setMarkdown(prepareMarkdown(text));
+    scratch.setMarkdown(prepareMarkdown(text), QTextDocument::MarkdownNoHTML);
     insertPlain(Kind::Sisi, QString());          // the label line
     QTextCursor c(document());
     c.movePosition(QTextCursor::End);

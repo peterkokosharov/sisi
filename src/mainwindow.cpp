@@ -294,6 +294,7 @@ void MainWindow::onReply(const QString &text) {
 }
 
 void MainWindow::onTurnDone() {
+    cancelPermissions();                       // a finished turn leaves nothing to ask
     stopTimer_->stop();
     chat_->finishAnswers();
     setBusy(false);
@@ -329,7 +330,7 @@ void MainWindow::onPermission(const QString &id, const QString &tool, const QStr
     const PermissionReq req = makePermissionReq(id.toStdString(), tool.toStdString(), kind.toStdString(),
                                                 summary.toStdString(), detail.toStdString());
     if (!perms_.push(req)) {
-        addLine(tr("[permission request without a usable id ignored]"));
+        addLine(tr("[permission request ignored: duplicate or missing id]"));
         return;
     }
     if (!permDlg_) showNextPermission();

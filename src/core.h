@@ -170,8 +170,7 @@ inline std::string clipText(const std::string &s, size_t max) {
     if (s.size() <= max) return s;
     size_t n = max;
     while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;
-    return s.substr(0, n) + "
-[... truncated]";
+    return s.substr(0, n) + "\n[... truncated]";
 }
 
 // Detail is shown in full up to 20000 characters, the summary is one short line.
@@ -227,8 +226,7 @@ inline char classifyDiffLine(const std::string &line) {
 inline bool looksLikeDiff(const std::string &text) {
     size_t p = 0;
     while (p < text.size()) {
-        size_t e = text.find('
-', p);
+        size_t e = text.find('\n', p);
         if (e == std::string::npos) e = text.size();
         if (e - p >= 4 && text.compare(p, 2, "@@") == 0) {
             size_t m = text.find("@@", p + 2);

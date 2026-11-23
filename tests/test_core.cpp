@@ -259,11 +259,10 @@ static void testPermission() {
     CHECK(makePermissionReq("a", "bash", "exec", "s", "short").detail == "short");
     // the cut never splits a UTF-8 sequence (each char below is 2 bytes)
     std::string cyr;
-    for (int i = 0; i < 20; ++i) cyr += "Ð±";
+    for (int i = 0; i < 20; ++i) cyr += "\xD0\xB1";
     std::string cut = clipText(cyr, 5);
-    CHECK(cut.compare(0, 4, "Ð±Ð±") == 0 && cut.find("[... truncated]") != std::string::npos);
-    CHECK(cut[4] == '
-');
+    CHECK(cut.compare(0, 4, "\xD0\xB1\xD0\xB1") == 0 && cut.find("[... truncated]") != std::string::npos);
+    CHECK(cut[4] == '\n');
 
     PermQueue q;
     CHECK(q.empty() && q.pop().empty());
@@ -281,21 +280,10 @@ static void testPermission() {
     CHECK(classifyDiffLine("@@ -1,2 +1,3 @@") == '@');
     CHECK(classifyDiffLine("--- a/f.txt") == 'h' && classifyDiffLine("+++ b/f.txt") == 'h');
     CHECK(classifyDiffLine(" context") == ' ' && classifyDiffLine("") == ' ' && classifyDiffLine("--x") == '-');
-    CHECK(looksLikeDiff("--- a/f
-+++ b/f
-@@ -1 +1 @@
--a
-+b
-"));
-    CHECK(looksLikeDiff("@@ -1 +1 @@
--a
-+b"));
-    CHECK(!looksLikeDiff("ls -l
-+x
--y
-"));
-    CHECK(!looksLikeDiff("echo @@
-"));
+    CHECK(looksLikeDiff("--- a/f\n+++ b/f\n@@ -1 +1 @@\n-a\n+b\n"));
+    CHECK(looksLikeDiff("@@ -1 +1 @@\n-a\n+b"));
+    CHECK(!looksLikeDiff("ls -l\n+x\n-y\n"));
+    CHECK(!looksLikeDiff("echo @@\n"));
     CHECK(!looksLikeDiff(""));
 }
 
