@@ -11,6 +11,13 @@ Hobby project, MIT, use it anywhere.
   `<endpoint>/v1/models`, you can also type one) and a **Workspace** folder, type a prompt, press
   Ctrl+Enter or Send. Stop interrupts the current turn. The `+` button shows a second pane with every
   tool/shell call rex makes. Menu Sisi > Reset conversation starts a fresh context.
+- Answers are shown as Markdown once they are finished (headings, lists, code, links). Images in an
+  answer, `![alt](path/to/file.png)`, are shown inline when the file exists; relative paths start in the
+  workspace, wide images are scaled to the window. The chat is a plain Qt text widget, no browser engine.
+- A ```` ```mermaid ```` block is drawn as a picture if `merman-cli` is available
+  (https://github.com/Latias94/merman, single binary): put its folder in the environment variable
+  `MERMAN_HOME`, or set `merman` in `sisi.ini`, or have it on `PATH`. Without it the block stays code.
+  Sisi does not ship merman.
 - Changing endpoint, model or workspace restarts rex on the next Send (the conversation starts fresh).
 
 ## Running with rex

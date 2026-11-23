@@ -8,4 +8,6 @@ model     = haiku
 ; rex_dir   = C:\tools\rex
 ; Only if your endpoint needs a key (default: RUNTIME_LITELLM__API_KEY, else "dummy"):
 ; api_key   = sk-...
+; Full path of merman-cli, for ```mermaid blocks (else env MERMAN_HOME, else PATH):
+; merman    = C:\tools\merman\merman-cli.exe
 ; log       = sisi.log
