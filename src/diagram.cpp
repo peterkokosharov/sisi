@@ -20,6 +20,7 @@
 namespace {
 
 const int kTimeoutMs = 15000;
+const int kMaxJobs = 2;          // merman processes running at the same time
 
 // merman-cli: inside the folder MERMAN_HOME, else the path in sisi.ini, else on PATH.
 QString findMerman() {
@@ -53,13 +54,37 @@ bool DiagramRenderer::available(QString *why) const {
     return false;
 }
 
+DiagramRenderer::~DiagramRenderer() {
+    // The running processes are children of this object. Stop them now, so no merman is
+    // still writing into a temporary folder that is being removed.
+    for (QProcess *p : findChildren<QProcess *>()) {
+        p->disconnect(this);
+        p->kill();
+        p->waitForFinished(1000);
+    }
+}
+
 void DiagramRenderer::render(const QString &key, const QString &source) {
+    queue_.append(Pending{key, source});
+    pump();
+}
+
+void DiagramRenderer::pump() {
+    while (running_ < kMaxJobs && !queue_.isEmpty()) startJob(queue_.takeFirst());
+}
+
+void DiagramRenderer::startJob(const Pending &pending) {
+    const QString key = pending.key;
+    const QString source = pending.source;
     auto job = std::make_shared<Job>();
     job->key = key;
+    ++running_;
 
-    // done() is always delivered from the event loop, also for immediate failures.
+    // done() is always delivered from the event loop, also for immediate failures;
+    // then the next queued job may start.
     auto fail = [this, key](const QString &error) {
-        QMetaObject::invokeMethod(this, [this, key, error] { emit done(key, QImage(), error); },
+        --running_;
+        QMetaObject::invokeMethod(this, [this, key, error] { emit done(key, QImage(), error); pump(); },
                                   Qt::QueuedConnection);
     };
 
@@ -78,10 +103,11 @@ void DiagramRenderer::render(const QString &key, const QString &source) {
     auto end = [this, proc, job](const QImage &image, const QString &error) {
         if (job->ended) return;
         job->ended = true;
+        --running_;
         proc->disconnect(this);
         proc->deleteLater();
         // Queued: errorOccurred can fire inside proc->start(), and done() must not.
-        QMetaObject::invokeMethod(this, [this, job, image, error] { emit done(job->key, image, error); },
+        QMetaObject::invokeMethod(this, [this, job, image, error] { emit done(job->key, image, error); pump(); },
                                   Qt::QueuedConnection);
     };
 

@@ -9,6 +9,7 @@
 #define SISI_DIAGRAM_H
 
 #include <QImage>
+#include <QList>
 #include <QObject>
 #include <QString>
 
@@ -16,16 +17,26 @@ class DiagramRenderer : public QObject {
     Q_OBJECT
 public:
     explicit DiagramRenderer(QObject *parent = nullptr) : QObject(parent) {}
+    ~DiagramRenderer() override;       // ends running merman processes before their temp folders go
 
     // True if merman-cli can be found; if not, `why` says what to set.
     bool available(QString *why) const;
 
-    // Starts a render job; done() follows later (never from inside this call).
+    // Queues a render job (at most two merman processes run at once); done() follows later,
+    // never from inside this call.
     void render(const QString &key, const QString &source);
 
 signals:
     // image is null when it failed; error then says why.
     void done(const QString &key, const QImage &image, const QString &error);
+
+private:
+    struct Pending { QString key; QString source; };
+    void pump();                                   // starts queued jobs while there is room
+    void startJob(const Pending &job);
+
+    QList<Pending> queue_;
+    int running_ = 0;
 };
 
 #endif
