@@ -5,7 +5,6 @@
 
 #include <QAction>
 #include <QCloseEvent>
-#include <QColor>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFontDatabase>
