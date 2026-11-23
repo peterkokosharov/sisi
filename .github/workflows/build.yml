@@ -43,7 +43,7 @@ jobs:
       - name: Build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgl1-dev libxkbcommon-dev libxcb-cursor0
+          sudo apt-get install -y --no-install-recommends libgl-dev libegl-dev libxkbcommon-dev libxcb-cursor0
       - name: Build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -94,6 +94,9 @@ jobs:
           version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
           cache: true
+      - uses: ilammy/msvc-dev-cmd@v1.13.0     # MSVC environment (also needed by windeployqt)
+        with:
+          arch: x64
       - name: Build
         shell: bash
         run: |
@@ -104,7 +107,7 @@ jobs:
         run: |
           mkdir -p dist/sisi-windows
           cp build/Release/sisi.exe dist/sisi-windows/
-          windeployqt --release --no-translations dist/sisi-windows/sisi.exe
+          windeployqt --release --no-translations --compiler-runtimedist/sisi-windows/sisi.exe
           cp README.md LICENSE LICENSE-ini THIRD-PARTY.txt sisi.ini.example dist/sisi-windows/
           (cd dist && 7z a -tzip sisi-windows-x64.zip sisi-windows)
       - uses: actions/upload-artifact@v4
