@@ -28,6 +28,7 @@
 
 #include "chatview.h"
 #include "config.h"
+#include "permissiondialog.h"
 #include "rexbridge.h"
 
 namespace {
@@ -133,6 +134,7 @@ MainWindow::MainWindow()
     connect(bridge_, &RexBridge::token, this, &MainWindow::onToken);
     connect(bridge_, &RexBridge::reply, this, &MainWindow::onReply);
     connect(bridge_, &RexBridge::toolLog, this, &MainWindow::addToolLog);
+    connect(bridge_, &RexBridge::permission, this, &MainWindow::onPermission);
     connect(bridge_, &RexBridge::turnDone, this, &MainWindow::onTurnDone);
     connect(bridge_, &RexBridge::exited, this, &MainWindow::onExited);
 
@@ -182,6 +184,7 @@ void MainWindow::sendPrompt() {
 
 void MainWindow::stopTurn() {
     if (!busy_) return;
+    cancelPermissions();                       // rex may be waiting for an answer; deny them all
     QJsonObject msg;
     msg[QStringLiteral("type")] = QStringLiteral("stop");
     bridge_->send(msg);
@@ -195,6 +198,7 @@ void MainWindow::stopTimedOut() {
     addLine(tr("[rex did not react to stop, so it was killed; it restarts on the next message, "
                "the conversation starts fresh]"));
     bridge_->stop();
+    cancelPermissions();
     curModel_.clear();
     onTurnDone();
 }
@@ -289,9 +293,64 @@ void MainWindow::onTurnDone() {
 }
 
 void MainWindow::onExited() {
+    cancelPermissions();                       // rex is gone, nobody is waiting for an answer
     curModel_.clear();                         // next Send starts rex again
     chat_->finishAnswers();
     setBusy(false);
+}
+
+// ---------------------------------------------------------------------------
+// Permission requests: shown one after another, each answered exactly once
+// ---------------------------------------------------------------------------
+
+void MainWindow::onPermission(const QString &id, const QString &tool, const QString &kind,
+                              const QString &summary, const QString &detail) {
+    const PermissionReq req = makePermissionReq(id.toStdString(), tool.toStdString(), kind.toStdString(),
+                                                summary.toStdString(), detail.toStdString());
+    if (!perms_.push(req)) {
+        addLine(tr("[permission request without a usable id ignored]"));
+        return;
+    }
+    if (!permDlg_) showNextPermission();
+}
+
+void MainWindow::showNextPermission() {
+    if (permDlg_ || perms_.empty()) return;
+    auto *dlg = new PermissionDialog(perms_.front(), this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    permDlg_ = dlg;
+    connect(dlg, &QDialog::finished, this, [this, dlg](int) { onPermissionDone(dlg); });
+    dlg->open();
+}
+
+void MainWindow::onPermissionDone(PermissionDialog *dlg) {
+    if (dlg != permDlg_) return;
+    const PermDecision d = dlg->decision();
+    permDlg_ = nullptr;
+    answerPermission(d);
+    QTimer::singleShot(0, this, &MainWindow::showNextPermission);
+}
+
+// Replies for the first waiting request; the queue gives its id out only once.
+void MainWindow::answerPermission(PermDecision d) {
+    const std::string id = perms_.pop();
+    if (id.empty()) return;
+    QJsonObject msg;
+    msg[QStringLiteral("type")] = QStringLiteral("permission_reply");
+    msg[QStringLiteral("id")] = QString::fromStdString(id);
+    msg[QStringLiteral("decision")] = QString::fromLatin1(decisionName(d));
+    bridge_->send(msg);                        // returns false when rex is already gone
+}
+
+// Closes the open dialog and denies everything that waits (rex exited or Stop).
+void MainWindow::cancelPermissions() {
+    if (permDlg_) {
+        PermissionDialog *d = permDlg_;
+        permDlg_ = nullptr;
+        d->disconnect(this);                   // no second answer from its finished signal
+        d->forceDeny();
+    }
+    while (!perms_.empty()) answerPermission(PermDecision::Deny);
 }
 
 void MainWindow::addToolLog(const QString &text) {
@@ -328,6 +387,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
+    cancelPermissions();
     bridge_->stop();
     QMainWindow::closeEvent(event);
 }

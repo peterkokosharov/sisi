@@ -5,7 +5,9 @@
 // Runs  <python> -m runtime --model <model> --jsonl --local-tools  as a child
 // process and speaks JSON lines with it (same protocol as Layka):
 //   to rex:   {"type":"chat","text":...}  {"type":"reset"}  {"type":"stop"}
-//   from rex: ready, token, tool_start, tool_end, final, error, reset_ok, model_ok, bye
+//   from rex: ready, token, tool_start, tool_end, final, error, reset_ok, model_ok, bye,
+//             permission, context
+//   to rex:   {"type":"permission_reply","id":...,"decision":"allow_once|allow_always|deny"}
 // stdout carries the JSON lines; stderr is diagnostics (log + bash pane).
 #ifndef SISI_REXBRIDGE_H
 #define SISI_REXBRIDGE_H
@@ -35,6 +37,8 @@ signals:
     void token(const QString &delta);        // the next piece of the answer
     void reply(const QString &text);         // the final answer (may be empty)
     void toolLog(const QString &text);       // tool calls and rex diagnostics, for the bash pane
+    void permission(const QString &id, const QString &tool, const QString &kind,
+                    const QString &summary, const QString &detail);   // rex asks to run something
     void turnDone();                         // the current request ended (final, error, bye)
     void exited();                           // the rex process is gone
 

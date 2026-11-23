@@ -18,6 +18,8 @@ add_executable(sisi WIN32 MACOSX_BUNDLE
     src/diagram.cpp
     src/diagram.h
     src/markdown.h
+    src/permissiondialog.cpp
+    src/permissiondialog.h
     src/rexbridge.cpp
     src/rexbridge.h
     src/config.cpp

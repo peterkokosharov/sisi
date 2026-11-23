@@ -7,6 +7,8 @@
 #include <QMainWindow>
 #include <QString>
 
+#include "core.h"
+
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -19,6 +21,7 @@ class QToolButton;
 class QWidget;
 class ChatView;
 class RexBridge;
+class PermissionDialog;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -41,12 +44,18 @@ private slots:
     void onReply(const QString &text);
     void onTurnDone();
     void onExited();
+    void onPermission(const QString &id, const QString &tool, const QString &kind,
+                      const QString &summary, const QString &detail);
     void addToolLog(const QString &text);
     void addLine(const QString &text);
 
 private:
     void onModelsReply(QNetworkReply *reply);
     void setBusy(bool busy);
+    void showNextPermission();
+    void onPermissionDone(PermissionDialog *dlg);
+    void answerPermission(PermDecision d);
+    void cancelPermissions();
 
     RexBridge *bridge_;
     QNetworkAccessManager *nam_;
@@ -64,6 +73,9 @@ private:
     QPlainTextEdit *bash_;
     QLabel *status_;
     QTimer *stopTimer_;
+
+    PermQueue perms_;                // requests waiting; the first one is on screen
+    PermissionDialog *permDlg_ = nullptr;
 
     bool busy_ = false;
     bool streamedThisTurn_ = false;  // tokens were shown, so the final text must not be shown again

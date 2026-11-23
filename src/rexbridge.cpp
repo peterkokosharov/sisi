@@ -212,6 +212,11 @@ void RexBridge::handleLine(const QString &line) {
         emit turnDone();
     } else if (type == QLatin1String("reset_ok")) {
         emit info(QStringLiteral("[context reset]"));
+    } else if (type == QLatin1String("permission")) {
+        emit permission(o.value(QStringLiteral("id")).toString(), o.value(QStringLiteral("tool")).toString(),
+                        o.value(QStringLiteral("kind")).toString(),
+                        o.value(QStringLiteral("summary")).toString(),
+                        o.value(QStringLiteral("detail")).toString());
     } else if (type == QLatin1String("bye")) {
         emit turnDone();
     }
