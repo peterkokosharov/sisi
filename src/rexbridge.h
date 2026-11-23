@@ -39,6 +39,7 @@ signals:
     void toolLog(const QString &text);       // tool calls and rex diagnostics, for the bash pane
     void permission(const QString &id, const QString &tool, const QString &kind,
                     const QString &summary, const QString &detail);   // rex asks to run something
+    void context(double percent, bool warning);   // context usage after an answer or model change
     void turnDone();                         // the current request ended (final, error, bye)
     void exited();                           // the rex process is gone
 

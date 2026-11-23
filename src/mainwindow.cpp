@@ -116,6 +116,10 @@ MainWindow::MainWindow()
     QAction *reset = menuBar()->addMenu(tr("&Sisi"))->addAction(tr("&Reset conversation"));
     status_ = new QLabel;
     statusBar()->addWidget(status_);
+    ctx_ = new QLabel;
+    ctx_->setToolTip(tr("Context used by the conversation"));
+    ctx_->hide();
+    statusBar()->addPermanentWidget(ctx_);
     setBusy(false);
 
     // --- wiring ----------------------------------------------------------------
@@ -134,6 +138,7 @@ MainWindow::MainWindow()
     connect(bridge_, &RexBridge::token, this, &MainWindow::onToken);
     connect(bridge_, &RexBridge::reply, this, &MainWindow::onReply);
     connect(bridge_, &RexBridge::toolLog, this, &MainWindow::addToolLog);
+    connect(bridge_, &RexBridge::context, this, &MainWindow::onContext);
     connect(bridge_, &RexBridge::permission, this, &MainWindow::onPermission);
     connect(bridge_, &RexBridge::turnDone, this, &MainWindow::onTurnDone);
     connect(bridge_, &RexBridge::exited, this, &MainWindow::onExited);
@@ -206,6 +211,8 @@ void MainWindow::stopTimedOut() {
 void MainWindow::resetConversation() {
     if (busy_) return;
     chat_->clearChat();
+    ctx_->hide();                              // the old figure no longer applies
+    ctxWarned_ = false;
     QJsonObject msg;
     msg[QStringLiteral("type")] = QStringLiteral("reset");
     if (!bridge_->send(msg)) addLine(tr("[conversation cleared]"));   // rex is not running
@@ -294,9 +301,23 @@ void MainWindow::onTurnDone() {
 
 void MainWindow::onExited() {
     cancelPermissions();                       // rex is gone, nobody is waiting for an answer
+    ctx_->hide();
+    ctxWarned_ = false;
     curModel_.clear();                         // next Send starts rex again
     chat_->finishAnswers();
     setBusy(false);
+}
+
+// "ctx P%" in the status bar, orange from 80 % or when rex warns; one chat line per warning.
+void MainWindow::onContext(double percent, bool warning) {
+    const bool high = ctxIsHigh(percent, warning);
+    ctx_->setText(QString::fromStdString(ctxLabel(percent)));
+    ctx_->setStyleSheet(high ? QStringLiteral("color: #e07000; font-weight: bold;") : QString());
+    ctx_->show();
+    if (warning && !ctxWarned_)
+        addLine(tr("[context is nearly full (%1); consider resetting the conversation]")
+                    .arg(QString::fromStdString(ctxLabel(percent))));
+    ctxWarned_ = warning;
 }
 
 // ---------------------------------------------------------------------------

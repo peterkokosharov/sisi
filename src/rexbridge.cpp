@@ -217,6 +217,13 @@ void RexBridge::handleLine(const QString &line) {
                         o.value(QStringLiteral("kind")).toString(),
                         o.value(QStringLiteral("summary")).toString(),
                         o.value(QStringLiteral("detail")).toString());
+    } else if (type == QLatin1String("context")) {
+        double pct = o.value(QStringLiteral("percent")).toDouble(-1);
+        if (pct < 0) {                         // no percent: work it out from used and limit
+            const double lim = o.value(QStringLiteral("limit")).toDouble();
+            if (lim > 0) pct = o.value(QStringLiteral("used")).toDouble() * 100.0 / lim;
+        }
+        if (pct >= 0) emit context(pct, o.value(QStringLiteral("warning")).toBool(false));
     } else if (type == QLatin1String("bye")) {
         emit turnDone();
     }
