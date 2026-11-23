@@ -153,6 +153,8 @@ static void testConfig() {
     Config c4;
     resolveConfig(c4, ini, fakeEnv, "python3");
     CHECK(c4.report.find("secret-value") == std::string::npos);
+    CHECK_STR(c4.apiKey.c_str(), "secret-value");   // read, but never reported in clear
+    CHECK(c4.report.find("api_key = *** (env)") != std::string::npos);
 
     ini_free(ini);
     std::remove(TMP);

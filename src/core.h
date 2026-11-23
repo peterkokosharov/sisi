@@ -17,8 +17,9 @@ struct Config {
     std::string workspace = ".";
     std::string python;
     std::string rexDir;
+    std::string apiKey;      // optional; never written to the report in clear
     std::string log;
-    std::string iniPath;     // file that was read, empty if none
+    std::string iniPath;    // file that was read, empty if none
     std::string report;      // "key = value (source)" lines for the log
 };
 
@@ -34,7 +35,9 @@ inline void cfgPick(Config &cfg, std::string &out, EnvFn env, const IniFile *ini
     if (e && *e) { out = e; src = "env"; }
     else if (v && *v) { out = v; src = "ini"; }
     // Only the fixed keys are ever reported, never arbitrary env values.
-    cfg.report += std::string("  ") + iniKey + " = " + out + " (" + src + ")\n";
+    const bool secret = std::string(iniKey) == "api_key";
+    cfg.report += std::string("  ") + iniKey + " = " + (secret && !out.empty() ? "***" : out) +
+                  " (" + src + ")\n";
 }
 
 // Precedence: env vars > ini > built-in defaults (pythonDefault is per OS).
@@ -47,6 +50,7 @@ inline void resolveConfig(Config &cfg, const IniFile *ini, EnvFn env,
     cfgPick(cfg, cfg.workspace, env, ini, "SISI_WORKSPACE", "workspace");
     cfgPick(cfg, cfg.python, env, ini, "SISI_PYTHON", "python");
     cfgPick(cfg, cfg.rexDir, env, ini, "SISI_REX_DIR", "rex_dir");
+    cfgPick(cfg, cfg.apiKey, env, ini, "SISI_API_KEY", "api_key");
     cfgPick(cfg, cfg.log, env, ini, "SISI_LOG", "log");
 }
 

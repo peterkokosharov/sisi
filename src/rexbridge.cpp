@@ -4,7 +4,6 @@
 #include "rexbridge.h"
 
 #include <QDir>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QProcessEnvironment>
@@ -25,7 +24,12 @@ bool RexBridge::start(const QString &endpoint, const QString &model, const QStri
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("RUNTIME_LITELLM__BASE_URL"), endpoint);
-    env.insert(QStringLiteral("RUNTIME_LITELLM__API_KEY"), QStringLiteral("dummy"));
+    // A key from the config, else one already in the environment, else a dummy
+    // (a local LiteLLM usually needs none).
+    if (!g_cfg.apiKey.empty())
+        env.insert(QStringLiteral("RUNTIME_LITELLM__API_KEY"), QString::fromStdString(g_cfg.apiKey));
+    else if (!env.contains(QStringLiteral("RUNTIME_LITELLM__API_KEY")))
+        env.insert(QStringLiteral("RUNTIME_LITELLM__API_KEY"), QStringLiteral("dummy"));
     if (!rexDir.isEmpty()) {
         QString pp = rexDir;
         const QString old = env.value(QStringLiteral("PYTHONPATH"));
@@ -39,11 +43,13 @@ bool RexBridge::start(const QString &endpoint, const QString &model, const QStri
     logLine("rex start: " + python.toStdString() + " " + args.join(QLatin1Char(' ')).toStdString() +
             "  (cwd " + workspace.toStdString() + ", PYTHONPATH prefix " + rexDir.toStdString() + ")");
 
+    lastStderr_.clear();
     proc_ = new QProcess(this);
     proc_->setProcessEnvironment(env);
     if (!workspace.isEmpty()) proc_->setWorkingDirectory(workspace);
-    proc_->setProcessChannelMode(QProcess::MergedChannels);   // stderr noise arrives as text lines
-    connect(proc_, &QProcess::readyRead, this, &RexBridge::onReadyRead);
+    proc_->setProcessChannelMode(QProcess::SeparateChannels);   // stdout = JSON lines, stderr = noise
+    connect(proc_, &QProcess::readyReadStandardOutput, this, &RexBridge::onReadyRead);
+    connect(proc_, &QProcess::readyReadStandardError, this, &RexBridge::onStderr);
     connect(proc_, &QProcess::finished, this, &RexBridge::onFinished);
     connect(proc_, &QProcess::errorOccurred, this, &RexBridge::onError);
     proc_->start(python, args);
@@ -52,26 +58,29 @@ bool RexBridge::start(const QString &endpoint, const QString &model, const QStri
     return proc_->waitForStarted(5000);
 }
 
+// Blocks the GUI for up to about 3 seconds in the worst case; that is acceptable
+// for a quit or a restart, and it guarantees no orphaned rex is left behind.
 void RexBridge::stop() {
     if (!proc_) return;
     QProcess *p = proc_;
     proc_ = nullptr;
-    p->disconnect(this);                 // no more signals from the old process
+    p->disconnect(this);                     // no more signals from the old process
     if (p->state() != QProcess::NotRunning) {
-        p->closeWriteChannel();          // rex ends when its stdin closes
-#ifdef Q_OS_WIN
-        p->kill();                       // terminate() does nothing for a windowless console process
-#else
-        p->terminate();
-#endif
+        p->closeWriteChannel();              // rex ends by itself when its stdin closes
         if (!p->waitForFinished(1500)) {
-            p->kill();
-            p->waitForFinished(1500);
+#ifdef Q_OS_WIN
+            p->kill();                       // terminate() does nothing for a windowless console process
+#else
+            p->terminate();
+#endif
+            if (!p->waitForFinished(1500)) {
+                p->kill();
+                p->waitForFinished(1500);
+            }
         }
     }
     delete p;
     buf_.clear();
-    assistant_.clear();
 }
 
 bool RexBridge::send(const QJsonObject &obj) {
@@ -80,33 +89,56 @@ bool RexBridge::send(const QJsonObject &obj) {
     return proc_->write(data) == data.size();
 }
 
+// ---------------------------------------------------------------------------
+// Reading from the process
+// ---------------------------------------------------------------------------
+
 void RexBridge::onReadyRead() {
     if (!proc_) return;
-    buf_ += proc_->readAll();
-    int nl;
+    buf_ += proc_->readAllStandardOutput();
+    drainStdout(false);
+}
+
+// Hands every complete line in buf_ to handleLine; at the end also a last line without newline.
+void RexBridge::drainStdout(bool atEnd) {
+    qsizetype nl;
     while ((nl = buf_.indexOf('\n')) >= 0) {
         QByteArray raw = buf_.left(nl);
         buf_.remove(0, nl + 1);
         if (raw.endsWith('\r')) raw.chop(1);
-        if (raw.isEmpty()) continue;
-        handleLine(QString::fromUtf8(raw));
+        if (!raw.isEmpty()) handleLine(QString::fromUtf8(raw));
+    }
+    if (atEnd && !buf_.isEmpty()) {
+        const QByteArray raw = buf_.trimmed();
+        buf_.clear();
+        if (!raw.isEmpty()) handleLine(QString::fromUtf8(raw));
+    }
+}
+
+void RexBridge::onStderr() {
+    if (!proc_) return;
+    const QStringList lines = QString::fromUtf8(proc_->readAllStandardError()).split(QLatin1Char('\n'));
+    for (QString line : lines) {
+        line = line.trimmed();
+        if (line.isEmpty()) continue;
+        logLine("rex stderr> " + line.toStdString());
+        lastStderr_ = line;
+        emit toolLog(QStringLiteral("[rex stderr] ") + line);
     }
 }
 
 void RexBridge::onFinished(int code, QProcess::ExitStatus status) {
-    if (proc_) buf_ += proc_->readAll();
-    if (!buf_.isEmpty()) {                       // last line without a newline
-        QByteArray raw = buf_;
-        buf_.clear();
-        if (raw.endsWith('\r')) raw.chop(1);
-        if (!raw.isEmpty()) handleLine(QString::fromUtf8(raw));
-    }
-    const QString m = (status == QProcess::NormalExit)
-                          ? QStringLiteral("[rex exited, code %1]").arg(code)
-                          : QStringLiteral("[rex crashed]");
+    onStderr();
+    if (proc_) buf_ += proc_->readAllStandardOutput();
+    drainStdout(true);
+    const bool ok = (status == QProcess::NormalExit && code == 0);
+    QString m = (status == QProcess::NormalExit) ? QStringLiteral("[rex exited, code %1]").arg(code)
+                                                 : QStringLiteral("[rex crashed]");
     logLine(m.toStdString());
-    assistant_.clear();
-    emit info(m);
+    if (!ok) {
+        if (!lastStderr_.isEmpty()) m += QStringLiteral(" ") + lastStderr_;
+        emit info(m);
+    }
     emit exited();
 }
 
@@ -119,6 +151,10 @@ void RexBridge::onError(QProcess::ProcessError err) {
     emit info(m);
     emit exited();
 }
+
+// ---------------------------------------------------------------------------
+// One JSON line from rex
+// ---------------------------------------------------------------------------
 
 static QString firstString(const QJsonObject &o, const QStringList &keys) {
     for (const QString &k : keys) {
@@ -139,9 +175,9 @@ void RexBridge::handleLine(const QString &line) {
     const QJsonObject o = doc.object();
     const QString type = o.value(QStringLiteral("type")).toString();
 
-    // Tool events feed the bash pane. rex sends the tool name and arguments
-    // (tool_start) and ok/error (tool_end); tool_output is read if a rex sends it.
-    if (type == QLatin1String("tool_start")) {
+    if (type == QLatin1String("token")) {
+        emit token(o.value(QStringLiteral("text")).toString());
+    } else if (type == QLatin1String("tool_start")) {
         const QString name = o.value(QStringLiteral("name")).toString();
         const QJsonObject args = o.value(QStringLiteral("args")).toObject();
         QString cmd = firstString(args, {QStringLiteral("command"), QStringLiteral("cmd"),
@@ -149,65 +185,25 @@ void RexBridge::handleLine(const QString &line) {
         if (cmd.isEmpty())
             cmd = QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact));
         emit toolLog(QStringLiteral("$ [") + name + QStringLiteral("] ") + cmd);
-        return;
-    }
-    if (type == QLatin1String("tool_output")) {
-        QString text = firstString(o, {QStringLiteral("text"), QStringLiteral("data"),
-                                       QStringLiteral("output"), QStringLiteral("chunk")});
-        while (text.endsWith(QLatin1Char('\n')) || text.endsWith(QLatin1Char('\r'))) text.chop(1);
-        if (!text.isEmpty()) emit toolLog(text);
-        return;
-    }
-    if (type == QLatin1String("tool_end")) {
+    } else if (type == QLatin1String("tool_end")) {
+        // A failing tool is only logged in the bash pane; the turn goes on.
         const QJsonValue e = o.value(QStringLiteral("error"));
-        const bool ok = o.value(QStringLiteral("ok")).toBool(true);
-        const bool noError = e.isNull() || e.isUndefined();
-        emit toolLog((ok && noError) ? QStringLiteral("  (done)") : QStringLiteral("  (failed)"));
-        // falls through: an "error" field is shown in the chat below, but it does NOT end the turn
-    }
-
-    // An error: type "error", or an "error" field that is not null/false/empty.
-    QString errMsg;
-    bool isErr = (type == QLatin1String("error"));
-    const QJsonValue ev = o.value(QStringLiteral("error"));
-    if (ev.isString()) {
-        if (!ev.toString().isEmpty()) { errMsg = ev.toString(); isErr = true; }
-    } else if (ev.isObject()) {
-        errMsg = ev.toObject().value(QStringLiteral("message")).toString();
-        isErr = true;
-    } else if (ev.isArray() || ev.isDouble() || (ev.isBool() && ev.toBool())) {
-        isErr = true;
-    }
-    if (type != QLatin1String("token") && isErr) {
-        if (errMsg.isEmpty()) errMsg = o.value(QStringLiteral("message")).toString();
-        if (errMsg.isEmpty()) errMsg = line;
-        emit info(QStringLiteral("[rex error] ") + errMsg);
-        // Only an error or final event ends the turn, a failing tool does not.
-        if (type == QLatin1String("error") || type == QLatin1String("final")) {
-            assistant_.clear();
-            emit turnDone();
-        }
-        return;
-    }
-
-    if (type == QLatin1String("token")) {
-        assistant_ += o.value(QStringLiteral("text")).toString();
-        emit stream(assistant_);
+        const bool failed = !o.value(QStringLiteral("ok")).toBool(true) || !(e.isNull() || e.isUndefined());
+        QString why = e.isString() ? e.toString() : QString();
+        emit toolLog(failed ? QStringLiteral("  (failed: ") + why + QLatin1Char(')')
+                            : QStringLiteral("  (done)"));
     } else if (type == QLatin1String("final")) {
-        QString text = o.value(QStringLiteral("text")).toString();
-        if (text.isEmpty()) text = assistant_;
-        assistant_.clear();
-        if (text.isEmpty()) emit info(QStringLiteral("[rex returned an empty reply]"));
-        else emit reply(text);
+        emit reply(o.value(QStringLiteral("text")).toString());
         emit turnDone();
-    } else if (type == QLatin1String("ready")) {
-        emit info(QStringLiteral("[rex ready] model=") + o.value(QStringLiteral("model")).toString());
+    } else if (type == QLatin1String("error")) {
+        QString msg = o.value(QStringLiteral("message")).toString();
+        if (msg.isEmpty()) msg = line;
+        emit info(QStringLiteral("[rex error] ") + msg);
+        emit turnDone();
     } else if (type == QLatin1String("reset_ok")) {
         emit info(QStringLiteral("[context reset]"));
-    } else if (type == QLatin1String("model_ok")) {
-        emit info(QStringLiteral("[model] ") + o.value(QStringLiteral("model")).toString());
     } else if (type == QLatin1String("bye")) {
-        assistant_.clear();
         emit turnDone();
     }
+    // ready and model_ok need no reaction; every line is in the log anyway.
 }
