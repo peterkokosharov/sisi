@@ -9,6 +9,7 @@
 #include <string>
 
 #include "core.h"
+#include "markdown.h"
 
 static int g_fail = 0;
 static int g_run = 0;
@@ -192,7 +193,57 @@ static void testRedact() {
     CHECK(redactLog("max_tokens 100, keyboard layout") == "max_tokens 100, keyboard layout");
 }
 
+static void testFences() {
+    const std::string md =
+        "Intro\n"
+        "```mermaid\n"
+        "graph TD; A-->B;\n"
+        "```\n"
+        "text between ![x](a.png)\n"
+        "~~~python extra\n"
+        "print(1)\n"
+        "```\n"                      // not a closer: wrong character
+        "~~~\n"
+        "```plantuml\n"
+        "@startuml\n"
+        "unclosed";
+    std::vector<MdSegment> segs = splitFences(md);
+    CHECK(segs.size() == 5);
+    if (segs.size() == 5) {
+        CHECK(!segs[0].fence && segs[0].raw == "Intro\n");
+        CHECK(segs[1].fence && segs[1].lang == "mermaid" && segs[1].body == "graph TD; A-->B;\n");
+        CHECK(!segs[2].fence && segs[2].raw == "text between ![x](a.png)\n");
+        CHECK(segs[3].fence && segs[3].lang == "python" && segs[3].body == "print(1)\n```\n");
+        CHECK(segs[4].fence && segs[4].lang == "plantuml" && segs[4].body == "@startuml\nunclosed");
+    }
+    std::string joined;                      // the raw parts give the input back
+    for (const MdSegment &s : segs) joined += s.raw;
+    CHECK(joined == md);
+
+    CHECK(splitFences("").empty());
+    CHECK(splitFences("no fences\r\nhere\r\n").size() == 1);
+    CHECK(splitFences("a ```inline``` code\n").size() == 1);      // not a fence line
+    std::vector<MdSegment> crlf = splitFences("```MermaiD\r\nA\r\n```\r\n");
+    CHECK(crlf.size() == 1 && crlf[0].fence && crlf[0].lang == "mermaid");
+}
+
+static void testImagePaths() {
+    CHECK(resolveImagePath("/home/u/ws", "img/a.png") == "/home/u/ws/img/a.png");
+    CHECK(resolveImagePath("/home/u/ws/", "a.png") == "/home/u/ws/a.png");
+    CHECK(resolveImagePath("C:\\ws", "a.png") == "C:\\ws/a.png");
+    CHECK(resolveImagePath("/ws", "/abs/a.png") == "/abs/a.png");
+    CHECK(resolveImagePath("/ws", "D:\\pics\\a.png") == "D:\\pics\\a.png");
+    CHECK(resolveImagePath("/ws", "file:///C:/pics/a.png") == "C:/pics/a.png");
+    CHECK(resolveImagePath("/ws", "file:///home/u/a.png") == "/home/u/a.png");
+    CHECK(resolveImagePath("", "a.png") == "a.png");
+    CHECK(isLocalImagePath("a.png") && isLocalImagePath("/x/a.png") && isLocalImagePath("file:///x.png"));
+    CHECK(!isLocalImagePath("https://x.org/a.png") && !isLocalImagePath("data:image/png;base64,AA"));
+    CHECK(!isLocalImagePath(""));
+}
+
 int main() {
+    testFences();
+    testImagePaths();
     testIni();
     testRedact();
     testConfig();
