@@ -175,7 +175,7 @@ QString ChatView::prepareMarkdown(const QString &md) {
         const QString raw = QString::fromStdString(s.raw);
         if (!s.fence) { out += rewriteImages(raw); continue; }
         const QString lang = QString::fromStdString(s.lang);
-        if (lang != QLatin1String("mermaid") && lang != QLatin1String("plantuml")) { out += raw; continue; }
+        if (lang != QLatin1String("mermaid")) { out += raw; continue; }
 
         const QString body = QString::fromStdString(s.body);
         const QString key = QString::fromLatin1(
@@ -186,23 +186,22 @@ QString ChatView::prepareMarkdown(const QString &md) {
             addImageResource(name, img.value());
             out += QStringLiteral("\n![") + lang + QStringLiteral("](") + name + QStringLiteral(")\n\n");
         } else {
-            requestDiagram(key, lang, body);
+            requestDiagram(key, body);
             out += raw;
         }
     }
     return out;
 }
 
-void ChatView::requestDiagram(const QString &key, const QString &lang, const QString &body) {
+void ChatView::requestDiagram(const QString &key, const QString &body) {
     if (requested_.contains(key)) return;        // asked before: rendering, or failed and shown as code
     requested_.insert(key);
     QString why;
-    if (!diagrams_->available(lang, &why)) {
-        if (!why.isEmpty())                      // later: we are in the middle of drawing the chat
-            QTimer::singleShot(0, this, [this, lang, why] { addStatus(tr("[%1] %2").arg(lang, why)); });
+    if (!diagrams_->available(&why)) {           // later: we are in the middle of drawing the chat
+        QTimer::singleShot(0, this, [this, why] { addStatus(tr("[mermaid] %1").arg(why)); });
         return;
     }
-    diagrams_->render(key, lang, body);
+    diagrams_->render(key, body);
 }
 
 void ChatView::onDiagramDone(const QString &key, const QImage &image, const QString &error) {

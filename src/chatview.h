@@ -47,7 +47,7 @@ private:
     void insertMarkdown(const QString &text);
     QString prepareMarkdown(const QString &md);
     QString rewriteImages(const QString &text);
-    void requestDiagram(const QString &key, const QString &lang, const QString &body);
+    void requestDiagram(const QString &key, const QString &body);
     void addImageResource(const QString &name, const QImage &image);
     void rebuild();
     void scrollDown();
