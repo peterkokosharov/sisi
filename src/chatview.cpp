@@ -4,7 +4,9 @@
 #include "chatview.h"
 
 #include <QCryptographicHash>
+#include <QFileInfo>
 #include <QRegularExpression>
+#include <QResizeEvent>
 #include <QScrollBar>
 #include <QTextCharFormat>
 #include <QTextCursor>
@@ -17,11 +19,31 @@
 #include "diagram.h"
 #include "markdown.h"
 
-ChatView::ChatView(QWidget *parent) : QTextBrowser(parent), diagrams_(new DiagramRenderer(this)) {
+ChatView::ChatView(QWidget *parent)
+    : QTextBrowser(parent), diagrams_(new DiagramRenderer(this)), resizeTimer_(new QTimer(this)) {
     setReadOnly(true);
     setOpenExternalLinks(true);     // http(s) and mailto links go to the system browser
     setOpenLinks(false);            // everything else must not replace the chat with a page
     connect(diagrams_, &DiagramRenderer::done, this, &ChatView::onDiagramDone);
+    resizeTimer_->setSingleShot(true);
+    connect(resizeTimer_, &QTimer::timeout, this, &ChatView::onResizeSettled);
+}
+
+// The document asks for images it does not know: we never load any by name.
+// Images added with addResource (our own sisi:// names) are found before this is called.
+QVariant ChatView::loadResource(int type, const QUrl &name) {
+    if (type == QTextDocument::ImageResource) return QVariant();
+    return QTextBrowser::loadResource(type, name);
+}
+
+// When the window size has settled, draw again so the images fit the new width.
+void ChatView::resizeEvent(QResizeEvent *event) {
+    QTextBrowser::resizeEvent(event);
+    resizeTimer_->start(200);
+}
+
+void ChatView::onResizeSettled() {
+    if (renderedWidth_ != 0 && viewport()->width() != renderedWidth_) rebuild();
 }
 
 // ---------------------------------------------------------------------------
@@ -71,11 +93,27 @@ void ChatView::finishAnswers() {
         if (e.kind == Kind::Sisi && !e.done) { e.done = true; any = true; }
     }
     if (any) rebuild();
+    const QStringList notes = pendingNotes_;     // held back while the answer was streaming
+    pendingNotes_.clear();
+    for (const QString &n : notes) addStatus(n);
+}
+
+bool ChatView::answering() const {
+    for (const Entry &e : entries_)
+        if (e.kind == Kind::Sisi && !e.done) return true;
+    return false;
+}
+
+// A status line that must not cut into a streaming answer waits until the answer is finished.
+void ChatView::note(const QString &text) {
+    if (answering()) pendingNotes_.append(text);
+    else addStatus(text);
 }
 
 void ChatView::clearChat() {
     streaming_ = false;
     entries_.clear();
+    pendingNotes_.clear();
     clear();
 }
 
@@ -135,14 +173,46 @@ void ChatView::scrollDown() {
 
 // Registers an image under a name the Markdown can point to, scaled down to the pane width.
 void ChatView::addImageResource(const QString &name, const QImage &image) {
-    const int maxWidth = qMax(120, viewport()->width() - 40);
+    renderedWidth_ = viewport()->width();
+    const int maxWidth = qMax(120, renderedWidth_ - 40);
     const QImage fitted = image.width() > maxWidth
                               ? image.scaledToWidth(maxWidth, Qt::SmoothTransformation)
                               : image;
     document()->addResource(QTextDocument::ImageResource, QUrl(name), QVariant(fitted));
 }
 
-// Local image files named in ![alt](path) become resources; other images are left alone.
+// The canonical path of `path` if it is a file inside the workspace, else an empty string.
+// Symbolic links and ".." are resolved first, so they cannot lead out of the folder.
+QString ChatView::insideWorkspace(const QString &path) const {
+    const QString root = QFileInfo(workspace_).canonicalFilePath();
+    const QString file = QFileInfo(path).canonicalFilePath();
+    if (root.isEmpty() || file.isEmpty()) return QString();       // missing, or no workspace
+#ifdef Q_OS_WIN
+    const Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+#else
+    const Qt::CaseSensitivity cs = Qt::CaseSensitive;
+#endif
+    const QString prefix = root.endsWith(QLatin1Char('/')) ? root : root + QLatin1Char('/');
+    if (file.compare(root, cs) == 0 || file.startsWith(prefix, cs)) return file;
+    return QString();
+}
+
+// Reads an image file; the result is kept until the file changes (time or size).
+QImage ChatView::loadImage(const QString &file) {
+    const QFileInfo info(file);
+    const auto it = files_.constFind(file);
+    if (it != files_.constEnd() && it->modified == info.lastModified() && it->size == info.size())
+        return it->image;
+    CachedImage c;
+    c.image = QImage(file);
+    c.modified = info.lastModified();
+    c.size = info.size();
+    files_.insert(file, c);
+    return c.image;
+}
+
+// Images named in ![alt](path) become resources, but only files inside the workspace;
+// anything else (absolute paths, "..", links out of the folder, http) is left as it is.
 QString ChatView::rewriteImages(const QString &text) {
     static const QRegularExpression re(QStringLiteral(R"re(!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(\s+"[^"]*")?\s*\))re"));
     QString out;
@@ -152,10 +222,12 @@ QString ChatView::rewriteImages(const QString &text) {
         const QRegularExpressionMatch m = it.next();
         const std::string path = m.captured(2).toStdString();
         if (!isLocalImagePath(path)) continue;
-        const QString file = QString::fromStdString(resolveImagePath(workspace_.toStdString(), path));
-        if (!files_.contains(file)) files_.insert(file, QImage(file));
-        const QImage &img = files_[file];
-        if (img.isNull()) continue;              // missing file: leave the Markdown as it is
+        const std::string rel = resolveImagePath(workspace_.toStdString(), path);   // lexical check
+        if (rel.empty()) continue;
+        const QString file = insideWorkspace(QString::fromStdString(rel));          // real path check
+        if (file.isEmpty()) continue;
+        const QImage img = loadImage(file);
+        if (img.isNull()) continue;              // not an image: leave the Markdown as it is
         const QString name = QStringLiteral("sisi://img/") +
                              QString::fromLatin1(QCryptographicHash::hash(file.toUtf8(), QCryptographicHash::Sha1).toHex());
         addImageResource(name, img);
@@ -198,7 +270,7 @@ void ChatView::requestDiagram(const QString &key, const QString &body) {
     requested_.insert(key);
     QString why;
     if (!diagrams_->available(&why)) {           // later: we are in the middle of drawing the chat
-        QTimer::singleShot(0, this, [this, why] { addStatus(tr("[mermaid] %1").arg(why)); });
+        QTimer::singleShot(0, this, [this, why] { note(tr("[mermaid] %1").arg(why)); });
         return;
     }
     diagrams_->render(key, body);
@@ -206,7 +278,7 @@ void ChatView::requestDiagram(const QString &key, const QString &body) {
 
 void ChatView::onDiagramDone(const QString &key, const QImage &image, const QString &error) {
     if (image.isNull()) {                        // the code block stays; say why once
-        addStatus(tr("[diagram] could not render: %1").arg(error));
+        note(tr("[diagram] could not render: %1").arg(error));
         return;
     }
     diagramImages_.insert(key, image);

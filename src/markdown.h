@@ -84,16 +84,27 @@ inline bool isLocalImagePath(const std::string &p) {
     return true;
 }
 
-// Relative paths are taken from the workspace. A file:// prefix is removed.
-inline std::string resolveImagePath(const std::string &workspace, std::string p) {
-    if (p.compare(0, 7, "file://") == 0) {
-        p.erase(0, 7);
-        if (p.size() >= 3 && p[0] == '/' && std::isalpha((unsigned char)p[1]) && p[2] == ':')
-            p.erase(0, 1);                                     // file:///C:/x -> C:/x
+// Joins a relative image path to the workspace. Only paths that stay inside the workspace
+// are accepted; the result is empty for anything else: no workspace, absolute paths
+// (/x, \x, C:\x), file:// URLs, and ".." that climbs out. (The caller must still check the
+// real path on disk, because of symbolic links.)
+inline std::string resolveImagePath(const std::string &workspace, const std::string &p) {
+    if (workspace.empty() || p.empty()) return std::string();
+    if (p.compare(0, 7, "file://") == 0) return std::string();
+    if (p[0] == '/' || p[0] == '\\') return std::string();
+    if (p.size() >= 2 && std::isalpha((unsigned char)p[0]) && p[1] == ':') return std::string();
+
+    int depth = 0;                                             // how far below the workspace we are
+    size_t i = 0;
+    while (i <= p.size()) {
+        size_t j = p.find_first_of("/\\", i);
+        if (j == std::string::npos) j = p.size();
+        const std::string part = p.substr(i, j - i);
+        if (part == "..") { if (--depth < 0) return std::string(); }
+        else if (!part.empty() && part != ".") ++depth;
+        i = j + 1;
     }
-    const bool absolute = !p.empty() && (p[0] == '/' || p[0] == '\\' ||
-                          (p.size() >= 2 && std::isalpha((unsigned char)p[0]) && p[1] == ':'));
-    if (absolute || workspace.empty()) return p;
+
     std::string base = workspace;
     while (!base.empty() && (base.back() == '/' || base.back() == '\\')) base.pop_back();
     return base + "/" + p;

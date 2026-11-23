@@ -231,11 +231,16 @@ static void testImagePaths() {
     CHECK(resolveImagePath("/home/u/ws", "img/a.png") == "/home/u/ws/img/a.png");
     CHECK(resolveImagePath("/home/u/ws/", "a.png") == "/home/u/ws/a.png");
     CHECK(resolveImagePath("C:\\ws", "a.png") == "C:\\ws/a.png");
-    CHECK(resolveImagePath("/ws", "/abs/a.png") == "/abs/a.png");
-    CHECK(resolveImagePath("/ws", "D:\\pics\\a.png") == "D:\\pics\\a.png");
-    CHECK(resolveImagePath("/ws", "file:///C:/pics/a.png") == "C:/pics/a.png");
-    CHECK(resolveImagePath("/ws", "file:///home/u/a.png") == "/home/u/a.png");
-    CHECK(resolveImagePath("", "a.png") == "a.png");
+    CHECK(resolveImagePath("/ws", "a/../b.png") == "/ws/a/../b.png");   // stays inside: allowed
+    // everything that could leave the workspace is refused
+    CHECK(resolveImagePath("/ws", "../a.png").empty());
+    CHECK(resolveImagePath("/ws", "a/../../b.png").empty());
+    CHECK(resolveImagePath("/ws", "a\\..\\..\\b.png").empty());
+    CHECK(resolveImagePath("/ws", "/abs/a.png").empty());
+    CHECK(resolveImagePath("/ws", "D:\\pics\\a.png").empty());
+    CHECK(resolveImagePath("/ws", "file:///C:/pics/a.png").empty());
+    CHECK(resolveImagePath("/ws", "file:///home/u/a.png").empty());
+    CHECK(resolveImagePath("", "a.png").empty());
     CHECK(isLocalImagePath("a.png") && isLocalImagePath("/x/a.png") && isLocalImagePath("file:///x.png"));
     CHECK(!isLocalImagePath("https://x.org/a.png") && !isLocalImagePath("data:image/png;base64,AA"));
     CHECK(!isLocalImagePath(""));
