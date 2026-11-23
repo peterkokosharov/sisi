@@ -7,7 +7,6 @@
 #include <QMainWindow>
 #include <QString>
 
-class QColor;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -38,7 +37,7 @@ private slots:
     void pickFolder();
     void refreshModels();
     void toggleBashPane();
-    void onStream(const QString &textSoFar);
+    void onToken(const QString &delta);
     void onReply(const QString &text);
     void onTurnDone();
     void onExited();
@@ -47,7 +46,8 @@ private slots:
 
 private:
     void onModelsReply(QNetworkReply *reply);
-    void appendChat(const QString &label, const QString &text, const QColor &color);
+    enum class Kind { User, Sisi, Status };   // decides label and colour of a chat line
+    void appendChat(Kind kind, const QString &text);
     void setBusy(bool busy);
     void scrollChatDown();
 
@@ -69,8 +69,8 @@ private:
     QTimer *stopTimer_;
 
     bool busy_ = false;
-    bool streaming_ = false;     // the last chat block is a SISI answer that is still growing
-    int streamStart_ = 0;        // document position where that block starts
+    bool streaming_ = false;         // the last chat block is a SISI answer that tokens can extend
+    bool streamedThisTurn_ = false;  // tokens were shown, so the final text must not be shown again
     QString curEndpoint_, curModel_, curWorkspace_;   // what the running rex was started with
 };
 

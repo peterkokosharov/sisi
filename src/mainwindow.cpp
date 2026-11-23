@@ -134,7 +134,7 @@ MainWindow::MainWindow()
     connect(stopTimer_, &QTimer::timeout, this, &MainWindow::stopTimedOut);
 
     connect(bridge_, &RexBridge::info, this, &MainWindow::addLine);
-    connect(bridge_, &RexBridge::stream, this, &MainWindow::onStream);
+    connect(bridge_, &RexBridge::token, this, &MainWindow::onToken);
     connect(bridge_, &RexBridge::reply, this, &MainWindow::onReply);
     connect(bridge_, &RexBridge::toolLog, this, &MainWindow::addToolLog);
     connect(bridge_, &RexBridge::turnDone, this, &MainWindow::onTurnDone);
@@ -178,7 +178,8 @@ void MainWindow::sendPrompt() {
         return;
     }
     streaming_ = false;                        // a new turn starts a new SISI block
-    appendChat(QStringLiteral("YOU: "), text, Qt::darkBlue);
+    streamedThisTurn_ = false;
+    appendChat(Kind::User, text);
     prompt_->clear();
     setBusy(true);
 }
@@ -269,22 +270,28 @@ void MainWindow::onModelsReply(QNetworkReply *reply) {
 // Events from rex
 // ---------------------------------------------------------------------------
 
-void MainWindow::onStream(const QString &textSoFar) {
+// Tokens extend the current SISI block; a status line in between ends it,
+// and the next token then opens a new block.
+void MainWindow::onToken(const QString &delta) {
+    if (delta.isEmpty()) return;
     if (!streaming_) {
-        appendChat(QStringLiteral("SISI: "), QString(), Qt::darkGreen);
-        streamStart_ = chat_->document()->characterCount() - 1;
+        appendChat(Kind::Sisi, QString());
         streaming_ = true;
     }
     QTextCursor c(chat_->document());
-    c.setPosition(streamStart_);
-    c.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
-    c.insertText(textSoFar, QTextCharFormat());   // plain, not the bold label style
+    c.movePosition(QTextCursor::End);
+    c.insertText(delta, QTextCharFormat());    // plain, not the bold label style
+    streamedThisTurn_ = true;
     scrollChatDown();
 }
 
+// The final text repeats what the tokens already showed, so it only counts
+// when nothing was streamed (rex without streaming).
 void MainWindow::onReply(const QString &text) {
-    if (streaming_) onStream(text);            // replace the streamed text by the final one
-    else appendChat(QStringLiteral("SISI: "), text, Qt::darkGreen);
+    if (!streamedThisTurn_) {
+        if (text.isEmpty()) addLine(tr("[rex returned an empty reply]"));
+        else appendChat(Kind::Sisi, text);
+    }
     streaming_ = false;
 }
 
@@ -307,23 +314,27 @@ void MainWindow::addToolLog(const QString &text) {
 // A status or error line in the chat pane.
 void MainWindow::addLine(const QString &text) {
     streaming_ = false;
-    appendChat(QString(), text, Qt::gray);
+    appendChat(Kind::Status, text);
 }
 
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
 
-void MainWindow::appendChat(const QString &label, const QString &text, const QColor &color) {
+void MainWindow::appendChat(Kind kind, const QString &text) {
     QTextCursor c(chat_->document());
     c.movePosition(QTextCursor::End);
     if (!chat_->document()->isEmpty()) c.insertBlock();
-    QTextCharFormat bold;
-    bold.setFontWeight(QFont::Bold);
-    bold.setForeground(color);
-    QTextCharFormat plain;
-    if (color == Qt::gray) plain.setForeground(color);
-    if (!label.isEmpty()) c.insertText(label, bold);
+
+    QTextCharFormat plain;                     // the text itself
+    if (kind == Kind::Status) {
+        plain.setForeground(Qt::gray);
+    } else {
+        QTextCharFormat label;                 // bold, coloured "YOU: " / "SISI: "
+        label.setFontWeight(QFont::Bold);
+        label.setForeground(kind == Kind::User ? Qt::darkBlue : Qt::darkGreen);
+        c.insertText(kind == Kind::User ? QStringLiteral("YOU: ") : QStringLiteral("SISI: "), label);
+    }
     c.insertText(text, plain);
     scrollChatDown();
 }
