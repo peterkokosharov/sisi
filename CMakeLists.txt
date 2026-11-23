@@ -13,6 +13,11 @@ add_executable(sisi WIN32 MACOSX_BUNDLE
     src/main.cpp
     src/mainwindow.cpp
     src/mainwindow.h
+    src/chatview.cpp
+    src/chatview.h
+    src/diagram.cpp
+    src/diagram.h
+    src/markdown.h
     src/rexbridge.cpp
     src/rexbridge.h
     src/config.cpp

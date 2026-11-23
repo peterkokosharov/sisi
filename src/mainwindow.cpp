@@ -20,16 +20,13 @@
 #include <QNetworkRequest>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QScrollBar>
 #include <QStatusBar>
-#include <QTextCharFormat>
-#include <QTextCursor>
-#include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include "chatview.h"
 #include "config.h"
 #include "rexbridge.h"
 
@@ -64,8 +61,8 @@ MainWindow::MainWindow()
     settings->setColumnStretch(1, 1);
 
     // --- chat and bash pane --------------------------------------------------
-    chat_ = new QTextEdit;
-    chat_->setReadOnly(true);
+    chat_ = new ChatView;
+    chat_->setWorkspace(workspace_->text());
 
     bash_ = new QPlainTextEdit;
     bash_->setReadOnly(true);
@@ -176,9 +173,9 @@ void MainWindow::sendPrompt() {
         addLine(tr("[error] could not write to rex"));
         return;
     }
-    streaming_ = false;                        // a new turn starts a new SISI block
     streamedThisTurn_ = false;
-    appendChat(Kind::User, text);
+    chat_->setWorkspace(workspace);            // relative image paths in answers start here
+    chat_->addUser(text);
     prompt_->clear();
     setBusy(true);
 }
@@ -204,8 +201,7 @@ void MainWindow::stopTimedOut() {
 
 void MainWindow::resetConversation() {
     if (busy_) return;
-    chat_->clear();
-    streaming_ = false;
+    chat_->clearChat();
     QJsonObject msg;
     msg[QStringLiteral("type")] = QStringLiteral("reset");
     if (!bridge_->send(msg)) addLine(tr("[conversation cleared]"));   // rex is not running
@@ -269,19 +265,12 @@ void MainWindow::onModelsReply(QNetworkReply *reply) {
 // Events from rex
 // ---------------------------------------------------------------------------
 
-// Tokens extend the current SISI block; a status line in between ends it,
-// and the next token then opens a new block.
+// Tokens stream into the chat as plain text; the finished answer is drawn as Markdown
+// by ChatView when the turn ends.
 void MainWindow::onToken(const QString &delta) {
     if (delta.isEmpty()) return;
-    if (!streaming_) {
-        appendChat(Kind::Sisi, QString());
-        streaming_ = true;
-    }
-    QTextCursor c(chat_->document());
-    c.movePosition(QTextCursor::End);
-    c.insertText(delta, QTextCharFormat());    // plain, not the bold label style
+    chat_->addToken(delta);
     streamedThisTurn_ = true;
-    scrollChatDown();
 }
 
 // The final text repeats what the tokens already showed, so it only counts
@@ -289,20 +278,19 @@ void MainWindow::onToken(const QString &delta) {
 void MainWindow::onReply(const QString &text) {
     if (!streamedThisTurn_) {
         if (text.isEmpty()) addLine(tr("[rex returned an empty reply]"));
-        else appendChat(Kind::Sisi, text);
+        else chat_->addAnswer(text);
     }
-    streaming_ = false;
 }
 
 void MainWindow::onTurnDone() {
     stopTimer_->stop();
-    streaming_ = false;
+    chat_->finishAnswers();
     setBusy(false);
 }
 
 void MainWindow::onExited() {
     curModel_.clear();                         // next Send starts rex again
-    streaming_ = false;
+    chat_->finishAnswers();
     setBusy(false);
 }
 
@@ -312,36 +300,12 @@ void MainWindow::addToolLog(const QString &text) {
 
 // A status or error line in the chat pane.
 void MainWindow::addLine(const QString &text) {
-    streaming_ = false;
-    appendChat(Kind::Status, text);
+    chat_->addStatus(text);
 }
 
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
-
-void MainWindow::appendChat(Kind kind, const QString &text) {
-    QTextCursor c(chat_->document());
-    c.movePosition(QTextCursor::End);
-    if (!chat_->document()->isEmpty()) c.insertBlock();
-
-    QTextCharFormat plain;                     // the text itself
-    if (kind == Kind::Status) {
-        plain.setForeground(Qt::gray);
-    } else {
-        QTextCharFormat label;                 // bold, coloured "YOU: " / "SISI: "
-        label.setFontWeight(QFont::Bold);
-        label.setForeground(kind == Kind::User ? Qt::darkBlue : Qt::darkGreen);
-        c.insertText(kind == Kind::User ? QStringLiteral("YOU: ") : QStringLiteral("SISI: "), label);
-    }
-    c.insertText(text, plain);
-    scrollChatDown();
-}
-
-void MainWindow::scrollChatDown() {
-    QScrollBar *bar = chat_->verticalScrollBar();
-    bar->setValue(bar->maximum());
-}
 
 void MainWindow::setBusy(bool busy) {
     busy_ = busy;

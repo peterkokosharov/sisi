@@ -14,10 +14,10 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class QPlainTextEdit;
 class QPushButton;
-class QTextEdit;
 class QTimer;
 class QToolButton;
 class QWidget;
+class ChatView;
 class RexBridge;
 
 class MainWindow : public QMainWindow {
@@ -46,10 +46,7 @@ private slots:
 
 private:
     void onModelsReply(QNetworkReply *reply);
-    enum class Kind { User, Sisi, Status };   // decides label and colour of a chat line
-    void appendChat(Kind kind, const QString &text);
     void setBusy(bool busy);
-    void scrollChatDown();
 
     RexBridge *bridge_;
     QNetworkAccessManager *nam_;
@@ -58,7 +55,7 @@ private:
     QLineEdit *endpoint_;
     QComboBox *model_;
     QLineEdit *workspace_;
-    QTextEdit *chat_;
+    ChatView *chat_;
     QPlainTextEdit *prompt_;
     QPushButton *sendBtn_;
     QPushButton *stopBtn_;
@@ -69,7 +66,6 @@ private:
     QTimer *stopTimer_;
 
     bool busy_ = false;
-    bool streaming_ = false;         // the last chat block is a SISI answer that tokens can extend
     bool streamedThisTurn_ = false;  // tokens were shown, so the final text must not be shown again
     QString curEndpoint_, curModel_, curWorkspace_;   // what the running rex was started with
 };
