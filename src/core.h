@@ -6,6 +6,8 @@
 #ifndef SISI_CORE_H
 #define SISI_CORE_H
 
+#include <cmath>
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -144,5 +146,111 @@ inline std::string redactLog(const std::string &in) {
     }
     return res;
 }
+
+// ---------------------------------------------------------------------------
+// Permission requests from rex
+// ---------------------------------------------------------------------------
+
+enum class PermDecision { AllowOnce, AllowAlways, Deny };
+
+inline const char *decisionName(PermDecision d) {
+    switch (d) {
+    case PermDecision::AllowOnce: return "allow_once";
+    case PermDecision::AllowAlways: return "allow_always";
+    default: return "deny";
+    }
+}
+
+struct PermissionReq {
+    std::string id, tool, kind, summary, detail;
+};
+
+// Cuts `s` to at most `max` bytes without splitting a UTF-8 sequence; adds a marker if cut.
+inline std::string clipText(const std::string &s, size_t max) {
+    if (s.size() <= max) return s;
+    size_t n = max;
+    while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;
+    return s.substr(0, n) + "
+[... truncated]";
+}
+
+// Detail is shown in full up to 20000 characters, the summary is one short line.
+inline PermissionReq makePermissionReq(const std::string &id, const std::string &tool,
+                                       const std::string &kind, const std::string &summary,
+                                       const std::string &detail) {
+    PermissionReq r;
+    r.id = id;
+    r.tool = tool.empty() ? "?" : tool;
+    r.kind = kind;
+    r.summary = clipText(summary, 2000);
+    r.detail = clipText(detail, 20000);
+    return r;
+}
+
+// Requests wait here until the user answered; pop() hands out an id exactly once,
+// so a request can never get two replies.
+class PermQueue {
+public:
+    // False (and ignored) when the id is empty or already waiting.
+    bool push(const PermissionReq &r) {
+        if (r.id.empty()) return false;
+        for (const PermissionReq &q : q_)
+            if (q.id == r.id) return false;
+        q_.push_back(r);
+        return true;
+    }
+    bool empty() const { return q_.empty(); }
+    size_t size() const { return q_.size(); }
+    const PermissionReq &front() const { return q_.front(); }
+    // Removes the first request and returns its id; empty string if none is waiting.
+    std::string pop() {
+        if (q_.empty()) return std::string();
+        std::string id = q_.front().id;
+        q_.pop_front();
+        return id;
+    }
+private:
+    std::deque<PermissionReq> q_;
+};
+
+// Class of one line of a unified diff: '+' added, '-' removed, '@' hunk header,
+// 'h' file header (--- / +++), ' ' anything else.
+inline char classifyDiffLine(const std::string &line) {
+    if (line.compare(0, 4, "+++ ") == 0 || line.compare(0, 4, "--- ") == 0) return 'h';
+    if (line.compare(0, 2, "@@") == 0) return '@';
+    if (!line.empty() && line[0] == '+') return '+';
+    if (!line.empty() && line[0] == '-') return '-';
+    return ' ';
+}
+
+// True when the text looks like a unified diff: some line is a hunk header "@@ ... @@".
+inline bool looksLikeDiff(const std::string &text) {
+    size_t p = 0;
+    while (p < text.size()) {
+        size_t e = text.find('
+', p);
+        if (e == std::string::npos) e = text.size();
+        if (e - p >= 4 && text.compare(p, 2, "@@") == 0) {
+            size_t m = text.find("@@", p + 2);
+            if (m != std::string::npos && m < e) return true;
+        }
+        p = e + 1;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Context usage from rex
+// ---------------------------------------------------------------------------
+
+// "ctx 83%" for the status bar; percent is clamped to 0..999 and rounded.
+inline std::string ctxLabel(double percent) {
+    if (!(percent >= 0)) percent = 0;            // also catches NaN
+    if (percent > 999) percent = 999;
+    return "ctx " + std::to_string(static_cast<int>(std::floor(percent + 0.5))) + "%";
+}
+
+// Orange when at 80 % or more, or when rex flags a warning.
+inline bool ctxIsHigh(double percent, bool warning) { return warning || percent >= 80.0; }
 
 #endif

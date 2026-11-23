@@ -4,6 +4,7 @@
 //
 // Tests for the INI parser, config precedence and models-list parsing.
 // Plain C++, no framework: exit code 0 = all passed.
+#include <cmath>
 #include <cstdio>
 #include <map>
 #include <string>
@@ -246,6 +247,65 @@ static void testImagePaths() {
     CHECK(!isLocalImagePath(""));
 }
 
+static void testPermission() {
+    CHECK_STR(decisionName(PermDecision::AllowOnce), "allow_once");
+    CHECK_STR(decisionName(PermDecision::AllowAlways), "allow_always");
+    CHECK_STR(decisionName(PermDecision::Deny), "deny");
+
+    PermissionReq r = makePermissionReq("perm-1", "", "exec", "run ls", "ls -l");
+    CHECK(r.id == "perm-1" && r.tool == "?" && r.detail == "ls -l");
+    std::string big(30000, 'x');
+    CHECK(makePermissionReq("a", "bash", "exec", "s", big).detail.size() < 20100);
+    CHECK(makePermissionReq("a", "bash", "exec", "s", "short").detail == "short");
+    // the cut never splits a UTF-8 sequence (each char below is 2 bytes)
+    std::string cyr;
+    for (int i = 0; i < 20; ++i) cyr += "Ð±";
+    std::string cut = clipText(cyr, 5);
+    CHECK(cut.compare(0, 4, "Ð±Ð±") == 0 && cut.find("[... truncated]") != std::string::npos);
+    CHECK(cut[4] == '
+');
+
+    PermQueue q;
+    CHECK(q.empty() && q.pop().empty());
+    CHECK(!q.push(makePermissionReq("", "bash", "exec", "", "")));    // no id, no reply possible
+    CHECK(q.push(makePermissionReq("p1", "bash", "exec", "a", "")));
+    CHECK(q.push(makePermissionReq("p2", "write", "edit", "b", "")));
+    CHECK(!q.push(makePermissionReq("p1", "bash", "exec", "a", ""))); // duplicate id
+    CHECK(q.size() == 2 && q.front().id == "p1");
+    CHECK(q.pop() == "p1");                                           // each id comes out once
+    CHECK(q.front().id == "p2" && q.pop() == "p2");
+    CHECK(q.empty() && q.pop().empty());
+
+    CHECK(classifyDiffLine("+added") == '+');
+    CHECK(classifyDiffLine("-removed") == '-');
+    CHECK(classifyDiffLine("@@ -1,2 +1,3 @@") == '@');
+    CHECK(classifyDiffLine("--- a/f.txt") == 'h' && classifyDiffLine("+++ b/f.txt") == 'h');
+    CHECK(classifyDiffLine(" context") == ' ' && classifyDiffLine("") == ' ' && classifyDiffLine("--x") == '-');
+    CHECK(looksLikeDiff("--- a/f
++++ b/f
+@@ -1 +1 @@
+-a
++b
+"));
+    CHECK(looksLikeDiff("@@ -1 +1 @@
+-a
++b"));
+    CHECK(!looksLikeDiff("ls -l
++x
+-y
+"));
+    CHECK(!looksLikeDiff("echo @@
+"));
+    CHECK(!looksLikeDiff(""));
+}
+
+static void testContext() {
+    CHECK(ctxLabel(0) == "ctx 0%" && ctxLabel(42.4) == "ctx 42%" && ctxLabel(42.5) == "ctx 43%");
+    CHECK(ctxLabel(-5) == "ctx 0%" && ctxLabel(5000) == "ctx 999%");
+    CHECK(ctxLabel(std::nan("")) == "ctx 0%");
+    CHECK(!ctxIsHigh(79.9, false) && ctxIsHigh(80, false) && ctxIsHigh(10, true));
+}
+
 int main() {
     testFences();
     testImagePaths();
@@ -253,6 +313,8 @@ int main() {
     testRedact();
     testConfig();
     testModels();
+    testPermission();
+    testContext();
     std::printf("%d checks, %d failed\n", g_run, g_fail);
     return g_fail == 0 ? 0 : 1;
 }
