@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="sisi.svg">sisi.svg</file>
+    </qresource>
+</RCC>

@@ -5,8 +5,9 @@ project(sisi VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network Svg)
 
 add_executable(sisi WIN32 MACOSX_BUNDLE
     src/main.cpp
@@ -14,11 +15,14 @@ add_executable(sisi WIN32 MACOSX_BUNDLE
     src/mainwindow.h
     src/rexbridge.cpp
     src/rexbridge.h
+    src/config.cpp
+    src/config.h
     src/core.h
     src/ini.c
-    src/ini.h)
+    src/ini.h
+    resources/sisi.qrc)
 target_include_directories(sisi PRIVATE src)
-target_link_libraries(sisi PRIVATE Qt6::Widgets Qt6::Network)
+target_link_libraries(sisi PRIVATE Qt6::Widgets Qt6::Network Qt6::Svg)
 if(WIN32)
     target_compile_definitions(sisi PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
