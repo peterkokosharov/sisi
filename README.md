@@ -26,6 +26,21 @@ Sisi starts `<python> -m runtime --model <model> --jsonl --local-tools` with
 `RUNTIME_LITELLM__BASE_URL=<endpoint>`, `PYTHONPATH=<rex_dir>` and the workspace as working directory.
 Put the rex checkout in a folder `rex` next to the program or set `rex_dir`.
 
+## Permissions
+
+When rex wants to run something it asks first. Sisi shows a modal dialog with the tool, its kind, a one-line
+summary and the full detail (up to 20000 characters) in a read-only monospace box; for a unified diff the
+lines are coloured (`+` green, `-` red, `@@` blue). Buttons: **Allow once**, **Allow always**, **Deny**.
+Deny is the default; Esc and closing the window also deny. Several requests are shown one after another,
+and each gets exactly one reply (`permission_reply` with `allow_once`, `allow_always` or `deny`).
+If rex exits or you press Stop while a dialog is open, it closes and Sisi sends deny (when rex is still alive).
+
+## Context
+
+After every answer and model change rex reports how full the model context is. Sisi shows `ctx P%` at the
+right of the status bar, in orange from 80 % or when rex sets `warning`; at a warning one status line
+appears in the chat. The figure is cleared on Reset conversation and when rex exits.
+
 ## Config
 
 Order: environment `SISI_ENDPOINT`, `SISI_MODEL`, `SISI_WORKSPACE`, `SISI_PYTHON`, `SISI_REX_DIR`,
