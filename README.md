@@ -114,6 +114,8 @@ Tests need no Qt and are a separate project:
     cmake --build build-tests --config Release
     ctest --test-dir build-tests -C Release --output-on-failure
 
+All suites in one command and the full guide: [TESTING.md](TESTING.md).
+
 See `docs/ARCHITECTURE.md` for how the code is organised.
 
 ## Known limits

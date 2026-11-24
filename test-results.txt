@@ -1,0 +1,14 @@
+Sisi test results
+date (UTC): 2026-11-24 09:20:29
+git commit: 7048356
+os: Windows-11-10.0.26200-SP0
+
+suite: AI attribution headers
+  command: python -I tools/check_ai_header.py
+  passed: 1  failed: 0  skipped: 0
+
+suite: C++ unit tests (tests/test_core.cpp)
+  command: cmake -S tests -B build-tests; cmake --build build-tests --config Release; ctest --test-dir build-tests -C Release
+  not run here: cmake/ctest not installed
+
+overall: PASS

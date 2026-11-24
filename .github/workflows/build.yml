@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -23,12 +23,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Configure
         run: cmake -S tests -B build-tests
       - name: Build
         run: cmake --build build-tests --config Release
       - name: Run
         run: ctest --test-dir build-tests -C Release --output-on-failure
+      - name: All suites (header check, C++) and test-results.txt
+        run: python tools/run_tests.py --require-all
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ runner.os }}
+          path: test-results.txt
+          if-no-files-found: warn
 
   linux:
     name: Linux x86_64 (tar.gz)
